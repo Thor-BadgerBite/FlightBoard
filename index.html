@@ -28,7 +28,7 @@
 
         /* Table Styles */
         .flight-row { transition: all 0.2s; border-left: 4px solid transparent; border-right: 4px solid transparent; }
-        .flight-row:hover { background-color: #e2e8f0 !important; transform: scale(1.005); z-index: 10; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .flight-row:hover { background-color: #e2e8f0 !important; transform: translateY(-1px); z-index: 10; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         
         .row-arr { text-align: left; border-left-color: var(--accent-arr); }
         .row-dep { text-align: right; border-right-color: var(--accent-dep); }
@@ -139,7 +139,7 @@
         </div>
         
         <div class="bg-gray-50 p-2 text-center text-[10px] text-gray-400 border-t uppercase tracking-wider">
-            Data Source: <span id="data-source-label">FlightRadar24</span>
+            KCG Traffic : <span id="data-source-label">KCG Transfer dpt</span>
         </div>
 
     </div>
@@ -469,12 +469,12 @@
             btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-lg bg-red-600 hover:bg-red-700";
             btn.innerHTML = '<i class="fa-solid fa-satellite-dish animate-pulse"></i> LIVE ON';
             indicator.classList.remove('hidden');
-            sourceLabel.innerText = "FlightRadar24 (Live)";
+            sourceLabel.innerText = "Thomas Demisarlis";
         } else {
             btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-md bg-gray-400 hover:bg-gray-500";
             btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> GO LIVE';
             indicator.classList.add('hidden');
-            sourceLabel.innerText = isDockYard ? "DockYard (Future Schedule)" : "FlightRadar24 (History/Sched)";
+            sourceLabel.innerText = isDockYard ? "Thomas Demis" : "Thomas Demis";
         }
     }
 
@@ -484,36 +484,93 @@
         
         const ts = Math.floor(Date.now() / 1000);
         
-        const urlArr = FR24_API.replace('{mode}', 'arrivals').replace('{ts}', ts).replace('{page}', page);
-        const urlDep = FR24_API.replace('{mode}', 'departures').replace('{ts}', ts).replace('{page}', page);
-
+        // If we're viewing today (live mode), fetch BOTH past and scheduled flights
+        const today = new Date().toLocaleDateString('en-CA');
+        const selectedDate = document.getElementById('date-picker').value;
+        const isTodayView = selectedDate === today;
+        
         try {
-            const [resArr, resDep] = await Promise.all([
-                fetch(urlArr),
-                fetch(urlDep)
-            ]);
-
-            if (!resArr.ok || !resDep.ok) throw new Error("Connection Failed");
-
-            const jsonArr = await resArr.json();
-            const jsonDep = await resDep.json();
-
-            const airportInfo = jsonArr?.result?.response?.airport?.pluginData;
-            const arrList = airportInfo?.schedule?.arrivals?.data || [];
-            const depList = jsonDep?.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+            let allArrivals = [];
+            let allDepartures = [];
+            let airlineMap = {};
+            let airportInfo = null;
             
-            const airlineMap = {
-                ...(jsonArr?.result?.response?.airlines?.codeshare || {}),
-                ...(jsonDep?.result?.response?.airlines?.codeshare || {})
-            };
-
+            if (isTodayView) {
+                // Fetch BOTH page -1 (past) and page 1 (scheduled) for today
+                const urlArrPast = FR24_API.replace('{mode}', 'arrivals').replace('{ts}', ts).replace('{page}', -1);
+                const urlDepPast = FR24_API.replace('{mode}', 'departures').replace('{ts}', ts).replace('{page}', -1);
+                const urlArrSched = FR24_API.replace('{mode}', 'arrivals').replace('{ts}', ts).replace('{page}', 1);
+                const urlDepSched = FR24_API.replace('{mode}', 'departures').replace('{ts}', ts).replace('{page}', 1);
+                
+                const [resArrPast, resDepPast, resArrSched, resDepSched] = await Promise.all([
+                    fetch(urlArrPast),
+                    fetch(urlDepPast),
+                    fetch(urlArrSched),
+                    fetch(urlDepSched)
+                ]);
+                
+                if (!resArrPast.ok || !resDepPast.ok || !resArrSched.ok || !resDepSched.ok) {
+                    throw new Error("Connection Failed");
+                }
+                
+                const [jsonArrPast, jsonDepPast, jsonArrSched, jsonDepSched] = await Promise.all([
+                    resArrPast.json(),
+                    resDepPast.json(),
+                    resArrSched.json(),
+                    resDepSched.json()
+                ]);
+                
+                airportInfo = jsonArrPast?.result?.response?.airport?.pluginData || 
+                              jsonArrSched?.result?.response?.airport?.pluginData;
+                
+                const arrListPast = jsonArrPast?.result?.response?.airport?.pluginData?.schedule?.arrivals?.data || [];
+                const depListPast = jsonDepPast?.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+                const arrListSched = jsonArrSched?.result?.response?.airport?.pluginData?.schedule?.arrivals?.data || [];
+                const depListSched = jsonDepSched?.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+                
+                // Combine past and scheduled flights
+                allArrivals = [...arrListPast, ...arrListSched];
+                allDepartures = [...depListPast, ...depListSched];
+                
+                airlineMap = {
+                    ...(jsonArrPast?.result?.response?.airlines?.codeshare || {}),
+                    ...(jsonDepPast?.result?.response?.airlines?.codeshare || {}),
+                    ...(jsonArrSched?.result?.response?.airlines?.codeshare || {}),
+                    ...(jsonDepSched?.result?.response?.airlines?.codeshare || {})
+                };
+                
+            } else {
+                // For other dates, use single page fetch
+                const urlArr = FR24_API.replace('{mode}', 'arrivals').replace('{ts}', ts).replace('{page}', page);
+                const urlDep = FR24_API.replace('{mode}', 'departures').replace('{ts}', ts).replace('{page}', page);
+                
+                const [resArr, resDep] = await Promise.all([
+                    fetch(urlArr),
+                    fetch(urlDep)
+                ]);
+                
+                if (!resArr.ok || !resDep.ok) throw new Error("Connection Failed");
+                
+                const jsonArr = await resArr.json();
+                const jsonDep = await resDep.json();
+                
+                airportInfo = jsonArr?.result?.response?.airport?.pluginData;
+                allArrivals = airportInfo?.schedule?.arrivals?.data || [];
+                allDepartures = jsonDep?.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+                
+                airlineMap = {
+                    ...(jsonArr?.result?.response?.airlines?.codeshare || {}),
+                    ...(jsonDep?.result?.response?.airlines?.codeshare || {})
+                };
+            }
+            
             if (!airportInfo) throw new Error("Invalid API Data");
 
             if(isLive || page === -1) {
                 updateHeader(airportInfo.details, airportInfo.weather);
             }
             
-            processFR24Data(arrList, depList, airlineMap);
+            processFR24Data(allArrivals, allDepartures, airlineMap);
 
         } catch (err) {
             console.error(err);
@@ -729,10 +786,45 @@
             return new Date(`${selectedDateStr}T${timeStr}:00`).getTime() / 1000;
         };
 
+        // Filter to exclude incorrect multi-stop segments
+        // CFU (Corfu) should never appear as a direct origin/destination for EFL
+        // as it's part of multi-stop routes via PVK (Aktion/Lefkada)
+        const shouldIncludeFlight = (item, type) => {
+            const flightNumber = (item.flight.matched || item.flight.code || '').toUpperCase();
+            
+            // Check if this is a Sky Express flight (SEH or GQ prefix)
+            const isSkyExpress = flightNumber.startsWith('SEH') || flightNumber.startsWith('GQ');
+            
+            if (isSkyExpress) {
+                if (type === 'arrival') {
+                    // For arrivals: exclude if origin is CFU (actual origin is PVK)
+                    const originIata = item.departure.airport_iata;
+                    if (originIata === 'CFU') {
+                        console.log(`Filtering out incorrect arrival segment: ${flightNumber} from CFU (actual: PVK)`);
+                        return false;
+                    }
+                } else {
+                    // For departures: exclude if destination is CFU (actual destination is PVK)
+                    const destIata = item.arrival.airport_iata;
+                    if (destIata === 'CFU') {
+                        console.log(`Filtering out incorrect departure segment: ${flightNumber} to CFU (actual: PVK)`);
+                        return false;
+                    }
+                }
+            }
+            
+            return true;
+        };
+
         const add = (list, type) => {
             if(!Array.isArray(list)) return;
             
             list.forEach(item => {
+                // Filter out incorrect multi-stop segments
+                if (!shouldIncludeFlight(item, type)) {
+                    return; // Skip this flight
+                }
+                
                 const timeStr = type === 'arrival' ? item.arrival.time : item.departure.time;
                 const ts = getTs(timeStr);
                 const tsDate = new Date(ts * 1000);
