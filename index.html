@@ -951,7 +951,8 @@
             
             const s = f.status.toLowerCase();
             let stColor = 'bg-gray-100 text-gray-500';
-            if(s.includes('landed') || s.includes('departed')) stColor = 'bg-green-100 text-green-700';
+            if(s.includes('landed')) stColor = 'bg-green-100 text-green-700';
+	    else if(s.includes('departed')) stColor = 'bg-blue-100 text-blue-700';
             else if(s.includes('delayed')) stColor = 'bg-yellow-100 text-yellow-700';
             else if(s.includes('cancelled')) stColor = 'bg-red-100 text-red-700';
             else if(s.includes('scheduled')) stColor = 'bg-blue-50 text-blue-600';
@@ -966,7 +967,7 @@
             const cleanCity = (f.city || 'Unknown').replace(' International Airport', '').replace(' Airport', '');
 
             tr.innerHTML = `
-                <td class="p-3 font-mono font-bold text-slate-700">${timeStr}</td>
+                <td class="p-3 font-mono font-bold text-slate-700 text-lg">${timeStr}</td>
                 <td class="p-3 font-bold text-slate-900 text-center">
                     <div>${f.number}</div>
                     ${f.codeshare ? `<div class="text-[9px] text-slate-400 font-normal mt-1 border-t border-slate-200 pt-1 leading-tight">${f.codeshare}</div>` : ''}
@@ -1019,4 +1020,3 @@
 
 </body>
 </html>
-
