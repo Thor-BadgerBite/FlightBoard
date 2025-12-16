@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFL Flight Dashboard v25 (Logo Update)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-body: #f1f5f9;
+            --accent-dep: #3b82f6;
+            --accent-arr: #10b981;
+            --row-match: #fff7ed;
+            --border-match: #f97316;
+        }
+
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: #1e293b; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Table Styles */
+        .flight-row { transition: all 0.2s; border-left: 4px solid transparent; border-right: 4px solid transparent; }
+        .flight-row:hover { background-color: #e2e8f0 !important; transform: scale(1.005); z-index: 10; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        
+        .row-arr { text-align: left; border-left-color: var(--accent-arr); }
+        .row-dep { text-align: right; border-right-color: var(--accent-dep); }
+        
+        .row-arr .cell-content { justify-content: flex-start; }
+        .row-dep .cell-content { justify-content: flex-end; }
+        
+        .matched-plane { background-color: var(--row-match) !important; }
+        .matched-plane.row-arr { border-left-color: var(--border-match); }
+        .matched-plane.row-dep { border-right-color: var(--border-match); }
+
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #ef4444; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden flex flex-col min-h-[600px]">
+        
+        <!-- 1. HEADER BANNER -->
+        <div id="airport-banner" class="relative h-48 bg-gray-900 text-white flex flex-col justify-between p-6 bg-cover bg-center transition-all duration-500" style="background-image: linear-gradient(to right, #1e1e2d, #2d2d44);">
+            <div class="absolute inset-0 bg-black bg-opacity-40"></div>
+
+            <!-- Top Row -->
+            <div class="relative z-10 flex justify-between items-start">
+                <div>
+                    <h1 class="text-3xl font-bold tracking-tight flex items-center gap-3">
+                        <span class="bg-yellow-500 text-black px-2 py-0.5 rounded text-xl font-mono" id="banner-iata">EFL</span>
+                        <span id="banner-name">Kefalonia Airport</span>
+                    </h1>
+                    <p class="text-gray-300 text-sm mt-1" id="banner-region">Greece</p>
+                </div>
+                
+                <div class="text-right">
+                    <div id="live-clock" class="text-4xl font-mono font-bold tracking-widest tabular-nums">00:00:00</div>
+                    <div id="current-date" class="text-gray-300 text-sm uppercase tracking-wide mt-1">--</div>
+                </div>
+            </div>
+
+            <!-- Bottom Row -->
+            <div class="relative z-10 flex justify-between items-end">
+                <div class="flex items-center gap-4 bg-black bg-opacity-30 p-2 rounded-lg backdrop-blur-sm">
+                    <div class="text-3xl" id="wx-icon">⛅</div>
+                    <div>
+                        <div class="text-xl font-bold" id="wx-temp-container"><span id="wx-temp">--</span>°C</div>
+                        <div class="text-xs text-gray-300 flex gap-2">
+                            <span>💨 <span id="wx-wind">--</span></span>
+                            <span id="wx-hum-box">💧 <span id="wx-hum">--</span>%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="live-indicator" class="hidden flex items-center gap-2 bg-red-600 px-3 py-1 rounded-full text-xs font-bold animate-pulse shadow-lg">
+                    <div class="w-2 h-2 bg-white rounded-full"></div>
+                    LIVE FEED
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. CONTROLS -->
+        <div class="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap gap-4 items-center justify-between sticky top-0 z-30 shadow-sm">
+            
+            <div class="flex items-center gap-4">
+                <button id="btn-live" onclick="toggleLiveMode()" class="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-md bg-gray-400 hover:bg-gray-500">
+                    <i class="fa-solid fa-satellite-dish"></i> GO LIVE
+                </button>
+
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-500 group-hover:text-blue-500">
+                        <i class="fa-regular fa-calendar"></i>
+                    </div>
+                    <!-- Min date set via JS -->
+                    <input type="date" id="date-picker" onchange="handleDateChange()" class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-700 font-mono transition-shadow">
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 text-xs font-medium text-gray-500">
+                <span class="flex items-center gap-1.5"><div class="w-3 h-3 bg-green-500 rounded-sm"></div> Arrival</span>
+                <span class="flex items-center gap-1.5"><div class="w-3 h-3 bg-blue-500 rounded-sm"></div> Departure</span>
+                <div id="loader" class="loader hidden ml-2"></div>
+            </div>
+
+        </div>
+
+        <!-- 3. FLIGHT TABLE -->
+        <div class="flex-1 overflow-x-auto bg-white min-h-[400px]">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-800 text-slate-300 uppercase text-xs font-bold sticky top-0 z-20">
+                    <tr>
+                        <th class="p-3 w-24 tracking-wider">Time</th>
+                        <th class="p-3 w-28 text-center tracking-wider">Flight</th>
+                        <th class="p-3 w-16 text-center"></th>
+                        <th class="p-3 tracking-wider">Route / City</th>
+                        <th class="p-3 w-36 text-center tracking-wider">Status</th>
+                        <th class="p-3 w-32 text-right tracking-wider">Aircraft</th>
+                    </tr>
+                </thead>
+                <tbody id="flight-table-body" class="text-sm divide-y divide-gray-100">
+                    <!-- Rows injected by JS -->
+                </tbody>
+            </table>
+            
+            <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-gray-400">
+                <i class="fa-solid fa-plane-slash text-4xl mb-3 opacity-50"></i>
+                <p id="empty-msg">No flights found.</p>
+                <p id="error-detail" class="text-xs text-red-400 mt-2 font-mono"></p>
+            </div>
+        </div>
+        
+        <div class="bg-gray-50 p-2 text-center text-[10px] text-gray-400 border-t uppercase tracking-wider">
+            Data Source: <span id="data-source-label">FlightRadar24</span>
+        </div>
+
+    </div>
+
+<script>
+    // --- CONFIG ---
+    const AIRPORT_CODE = "EFL";
+    const AIRPORT_TIMEZONE = "Europe/Athens";
+    const EFL_LAT = 38.1200;
+    const EFL_LON = 20.5005;
+    
+    // --- MANUAL CHARTER FLIGHTS ---
+    // Note: Years assumed 2026 based on user context, though original query context was 2025/2026
+    const MANUAL_SCHEDULE = [
+        // 1. INNSBRUCK (INN) - Discover/Altenrhein Luftfahrt (using code BQ/PE logic)
+        // 09/05/2026 - 10/10/2026 (Fridays)
+        {
+            recurring: true,
+            start: '2026-05-09',
+            end: '2026-10-10',
+            days: [5], // Friday
+            airline: 'Discover Airlines',
+            city: 'Innsbruck',
+            iata: 'INN',
+            logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Discover_Airlines_Logo.svg/1200px-Discover_Airlines_Logo.svg.png',
+            movements: [
+                { type: 'arrival', time: '17:55', number: 'BQ2342' },
+                { type: 'departure', time: '18:40', number: 'BQ2343' }
+            ]
+        },
+
+        // 2. GRAZ (GRZ) - Avanti Air (ATV) - Period 1
+        // 07/05/2026 - 25/06/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-05-07',
+            end: '2026-06-25',
+            days: [4], // Thursday
+            airline: 'Avanti Air',
+            city: 'Graz',
+            iata: 'GRZ',
+            logo: 'https://www.avantiair.com/assets/images/d/facebook%20logo-f1a5d25d.jpg', 
+            movements: [
+                { type: 'arrival', time: '10:45', number: 'ATV411' },
+                { type: 'departure', time: '18:00', number: 'ATV414' }
+            ]
+        },
+
+        // 3. GRAZ (GRZ) - Avanti Air (ATV) - Period 2
+        // 02/07/2026 - 27/08/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-07-02',
+            end: '2026-08-27',
+            days: [4], // Thursday
+            airline: 'Avanti Air',
+            city: 'Graz',
+            iata: 'GRZ',
+            logo: 'https://www.avantiair.com/assets/images/d/facebook%20logo-f1a5d25d.jpg', 
+            movements: [
+                { type: 'arrival', time: '12:25', number: 'ATV411' },
+                { type: 'departure', time: '13:05', number: 'ATV412' }
+            ]
+        },
+
+        // 4. GRAZ (GRZ) - Avanti Air (ATV) - Period 3
+        // 03/09/2026 - 08/10/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-09-03',
+            end: '2026-10-08',
+            days: [4], // Thursday
+            airline: 'Avanti Air',
+            city: 'Graz',
+            iata: 'GRZ',
+            logo: 'https://www.avantiair.com/assets/images/d/facebook%20logo-f1a5d25d.jpg', 
+            movements: [
+                { type: 'arrival', time: '10:45', number: 'ATV411' },
+                { type: 'departure', time: '18:00', number: 'ATV414' }
+            ]
+        },
+
+        // 5. ALTENRHEIN (ACH) - People's (PE)
+        // 07/05/2026 - 08/10/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-05-07',
+            end: '2026-10-08',
+            days: [4], // Thursday
+            airline: "People's",
+            city: 'Altenrhein',
+            iata: 'ACH',
+            logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/People%27s_Viennaline_Logo.svg/1200px-People%27s_Viennaline_Logo.svg.png',
+            movements: [
+                { type: 'arrival', time: '13:30', number: 'PE540' },
+                { type: 'departure', time: '14:10', number: 'PE541' }
+            ]
+        },
+
+        // 6. LINZ (LNZ) - Avanti Air (ATV) - Period 1
+        // 07/05/2026 - 25/06/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-05-07',
+            end: '2026-06-25',
+            days: [4], // Thursday
+            airline: 'Avanti Air',
+            city: 'Linz',
+            iata: 'LNZ',
+            logo: 'https://www.avantiair.com/assets/images/d/facebook%20logo-f1a5d25d.jpg',
+            movements: [
+                { type: 'departure', time: '11:25', number: 'ATV412' },
+                { type: 'arrival', time: '17:20', number: 'ATV413' }
+            ]
+        },
+
+        // 7. LINZ (LNZ) - Avanti Air (ATV) - Period 2
+        // 02/07/2026 - 27/08/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-07-02',
+            end: '2026-08-27',
+            days: [4], // Thursday
+            airline: 'Avanti Air',
+            city: 'Linz',
+            iata: 'LNZ',
+            logo: 'https://www.avantiair.com/assets/images/d/facebook%20logo-f1a5d25d.jpg',
+            movements: [
+                { type: 'arrival', time: '12:25', number: 'ATV411' },
+                { type: 'departure', time: '13:05', number: 'ATV412' }
+            ]
+        },
+
+        // 8. LINZ (LNZ) - Avanti Air (ATV) - Period 3
+        // 03/09/2026 - 08/10/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-09-03',
+            end: '2026-10-08',
+            days: [4], // Thursday
+            airline: 'Avanti Air',
+            city: 'Linz',
+            iata: 'LNZ',
+            logo: 'https://www.avantiair.com/assets/images/d/facebook%20logo-f1a5d25d.jpg',
+            movements: [
+                { type: 'departure', time: '11:25', number: 'ATV412' },
+                { type: 'arrival', time: '17:20', number: 'ATV413' }
+            ]
+        },
+
+        // 9. VIENNA (VIE) - Austrian (OS)
+        // 05/06/2026 - 11/09/2026 (Fridays)
+        {
+            recurring: true,
+            start: '2026-06-05',
+            end: '2026-09-11',
+            days: [5], // Friday
+            airline: 'Austrian Airlines',
+            city: 'Vienna',
+            iata: 'VIE',
+            logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Austrian_Airlines_logo.svg/1200px-Austrian_Airlines_logo.svg.png',
+            movements: [
+                { type: 'arrival', time: '09:50', number: 'OS853' },
+                { type: 'departure', time: '10:35', number: 'OS854' }
+            ]
+        },
+
+        // 10. BUCHAREST (OTP) - Animawings (A2)
+        // 04/06/2026 - 27/09/2026 (Thursdays & Sundays)
+        {
+            recurring: true,
+            start: '2026-06-04',
+            end: '2026-09-27',
+            days: [0, 4], // Sunday & Thursday
+            airline: 'Animawings',
+            city: 'Bucharest',
+            iata: 'OTP',
+            logo: 'https://animawings.com/assets/images/logo.png', // Fallback or placeholder
+            movements: [
+                { type: 'arrival', time: '08:30', number: 'A24140' },
+                { type: 'departure', time: '09:15', number: 'A24141' },
+                { type: 'arrival', time: '19:30', number: 'A24140' }, // Evening rotation
+                { type: 'departure', time: '20:15', number: 'A24141' }
+            ]
+        },
+
+        // 11. TIMISOARA (TSR) - Animawings (A2)
+        // 04/06/2026 - 24/09/2026 (Thursdays)
+        {
+            recurring: true,
+            start: '2026-06-04',
+            end: '2026-09-24',
+            days: [4], // Thursday
+            airline: 'Animawings',
+            city: 'Timisoara',
+            iata: 'TSR',
+            logo: 'https://animawings.com/assets/images/logo.png',
+            movements: [
+                { type: 'arrival', time: '18:50', number: 'A24107' },
+                { type: 'departure', time: '19:35', number: 'A24104' }
+            ]
+        },
+
+        // 12. PRAGUE (PRG) - Smartwings (QS)
+        // 01/06/2026 - 28/09/2026 (Mondays & Thursdays)
+        {
+            recurring: true,
+            start: '2026-06-01',
+            end: '2026-09-28',
+            days: [1, 4], // Monday & Thursday
+            airline: 'Smartwings',
+            city: 'Prague',
+            iata: 'PRG',
+            logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Smartwings_Logo.svg/1200px-Smartwings_Logo.svg.png',
+            movements: [
+                { type: 'arrival', time: '15:35', number: 'QS1132' },
+                { type: 'departure', time: '16:25', number: 'QS1133' }
+            ]
+        }
+    ];
+
+    // Dynamic URL with {page} placeholder
+    const FR24_API = `https://api.flightradar24.com/common/v1/airport.json?code=${AIRPORT_CODE}&plugin[]=&plugin-setting[schedule][mode]={mode}&plugin-setting[schedule][timestamp]={ts}&page={page}&limit=100&fleet=&token=`;
+    const DOCKYARD_API = "https://flight.dock-yard.io/searchDayFlights";
+    // Open-Meteo API
+    const WEATHER_API = `https://api.open-meteo.com/v1/forecast?latitude=${EFL_LAT}&longitude=${EFL_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max&timezone=Europe%2FAthens`;
+
+    // --- STATE ---
+    let isLive = false;
+    let refreshInterval = null;
+
+    // --- INIT ---
+    document.addEventListener('DOMContentLoaded', () => {
+        startClock();
+        
+        // --- SET DATE LIMITS ---
+        const now = new Date();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        
+        // Format YYYY-MM-DD
+        const minDate = yesterday.toLocaleDateString('en-CA');
+        document.getElementById('date-picker').min = minDate;
+        
+        toggleLiveMode(); // Start in Live Mode by default
+    });
+
+    // --- CLOCK ---
+    function startClock() {
+        const update = () => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            if(now.getSeconds() === 0 || document.getElementById('current-date').innerText === '--') {
+                document.getElementById('current-date').innerText = now.toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' });
+            }
+        };
+        setInterval(update, 1000);
+        update();
+    }
+
+    // --- MODE CONTROLLERS ---
+    
+    // 1. GO LIVE (Defaults to Today, Page 1)
+    function toggleLiveMode() {
+        isLive = true;
+        
+        const now = new Date();
+        const localDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+        document.getElementById('date-picker').value = localDate;
+        
+        updateUIForMode(true);
+        fetchFR24Data(1); // Page 1 for Live/Today
+        
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => fetchFR24Data(1), 60000); // 1 minute interval
+    }
+
+    // 2. DATE CHANGE (Handles Mixed Logic)
+    function handleDateChange() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        
+        const selectedDate = document.getElementById('date-picker').value;
+        const now = new Date();
+        
+        // Calculate String Dates (YYYY-MM-DD)
+        const today = now.toLocaleDateString('en-CA');
+        
+        const tmr = new Date(now);
+        tmr.setDate(now.getDate() + 1);
+        const tomorrow = tmr.toLocaleDateString('en-CA');
+
+        if (selectedDate === today) {
+            // TODAY: FR24 Page 1 (Live)
+            isLive = true;
+            updateUIForMode(true);
+            fetchFR24Data(1);
+            refreshInterval = setInterval(() => fetchFR24Data(1), 60000);
+            
+        } else if (selectedDate < today) {
+            // YESTERDAY: FR24 Page -1
+            isLive = false;
+            updateUIForMode(false);
+            fetchFR24Data(-1);
+            
+        } else if (selectedDate === tomorrow) {
+            // TOMORROW: FR24 Page 1 (No Refresh) + Forecast Weather
+            isLive = false;
+            updateUIForMode(false);
+            fetchFR24Data(1);
+            fetchFutureWeather(selectedDate);
+            
+        } else {
+            // DAY AFTER TOMORROW + : DockYard API + Forecast Weather
+            isLive = false;
+            updateUIForMode(false, true); // True for DockYard
+            fetchDockYardData();
+            fetchFutureWeather(selectedDate);
+        }
+    }
+
+    function updateUIForMode(live, isDockYard = false) {
+        const btn = document.getElementById('btn-live');
+        const indicator = document.getElementById('live-indicator');
+        const sourceLabel = document.getElementById('data-source-label');
+        
+        if (live) {
+            btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-lg bg-red-600 hover:bg-red-700";
+            btn.innerHTML = '<i class="fa-solid fa-satellite-dish animate-pulse"></i> LIVE ON';
+            indicator.classList.remove('hidden');
+            sourceLabel.innerText = "FlightRadar24 (Live)";
+        } else {
+            btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-md bg-gray-400 hover:bg-gray-500";
+            btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> GO LIVE';
+            indicator.classList.add('hidden');
+            sourceLabel.innerText = isDockYard ? "DockYard (Future Schedule)" : "FlightRadar24 (History/Sched)";
+        }
+    }
+
+    // --- 1. FLIGHTRADAR24 FETCH ---
+    async function fetchFR24Data(page) {
+        showLoader();
+        
+        const ts = Math.floor(Date.now() / 1000);
+        
+        const urlArr = FR24_API.replace('{mode}', 'arrivals').replace('{ts}', ts).replace('{page}', page);
+        const urlDep = FR24_API.replace('{mode}', 'departures').replace('{ts}', ts).replace('{page}', page);
+
+        try {
+            const [resArr, resDep] = await Promise.all([
+                fetch(urlArr),
+                fetch(urlDep)
+            ]);
+
+            if (!resArr.ok || !resDep.ok) throw new Error("Connection Failed");
+
+            const jsonArr = await resArr.json();
+            const jsonDep = await resDep.json();
+
+            const airportInfo = jsonArr?.result?.response?.airport?.pluginData;
+            const arrList = airportInfo?.schedule?.arrivals?.data || [];
+            const depList = jsonDep?.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+            
+            const airlineMap = {
+                ...(jsonArr?.result?.response?.airlines?.codeshare || {}),
+                ...(jsonDep?.result?.response?.airlines?.codeshare || {})
+            };
+
+            if (!airportInfo) throw new Error("Invalid API Data");
+
+            if(isLive || page === -1) {
+                updateHeader(airportInfo.details, airportInfo.weather);
+            }
+            
+            processFR24Data(arrList, depList, airlineMap);
+
+        } catch (err) {
+            console.error(err);
+            showError("Data Error", err.message);
+        }
+    }
+
+    // --- 2. DOCKYARD FETCH ---
+    async function fetchDockYardData() {
+        showLoader();
+        const dateStr = document.getElementById('date-picker').value;
+        
+        const paramsArr = new URLSearchParams({
+            departDate: dateStr,
+            fullResults: '1',
+            lang: 'uk',
+            noCodeShares: '1',
+            country: '',
+            destination: 'EFL',
+            location: ''
+        });
+
+        const paramsDep = new URLSearchParams({
+            departDate: dateStr,
+            fullResults: '1',
+            lang: 'uk',
+            noCodeShares: '1',
+            country: '',
+            destination: '',
+            location: 'EFL'
+        });
+
+        try {
+            const [resArr, resDep] = await Promise.all([
+                fetch(`${DOCKYARD_API}?${paramsArr}`),
+                fetch(`${DOCKYARD_API}?${paramsDep}`)
+            ]);
+
+            if (!resArr.ok || !resDep.ok) throw new Error(`API Error: ${resArr.status}`);
+
+            const arrData = await resArr.json();
+            const depData = await resDep.json();
+            
+            processDockYardData(arrData, depData);
+
+        } catch (err) {
+            console.error(err);
+            showError("History Data Error", "Could not fetch schedule data.");
+        }
+    }
+
+    // --- 3. WEATHER FORECAST FETCH ---
+    async function fetchFutureWeather(targetDateStr) {
+        try {
+            const res = await fetch(WEATHER_API);
+            if(!res.ok) throw new Error("Weather API failed");
+            const data = await res.json();
+            
+            const daily = data.daily;
+            if(!daily) return;
+
+            const idx = daily.time.indexOf(targetDateStr);
+            
+            if(idx !== -1) {
+                const forecast = {
+                    isForecast: true,
+                    tempMax: Math.round(daily.temperature_2m_max[idx]),
+                    tempMin: Math.round(daily.temperature_2m_min[idx]),
+                    windMax: Math.round(daily.wind_speed_10m_max[idx]),
+                    code: daily.weather_code[idx]
+                };
+                updateHeader(null, forecast);
+            } else {
+                updateHeader(null, null);
+            }
+
+        } catch(e) {
+            console.error("Weather fetch failed", e);
+            updateHeader(null, null);
+        }
+    }
+
+    // --- PROCESSORS ---
+    
+    // Helper to inject manual flights into any list
+    function injectManualFlights(allFlights, selectedDateStr) {
+        // Create date object (Set to Noon to avoid Timezone offset issues causing wrong day)
+        const selDate = new Date(`${selectedDateStr}T12:00:00`);
+        const selDay = selDate.getDay(); // 0 (Sunday) - 6 (Saturday)
+
+        MANUAL_SCHEDULE.forEach(item => {
+            let match = false;
+
+            // 1. Single Date Match
+            if (!item.recurring && item.date === selectedDateStr) {
+                match = true;
+            }
+            // 2. Recurring Match
+            else if (item.recurring) {
+                const start = new Date(`${item.start}T00:00:00`);
+                const end = new Date(`${item.end}T23:59:59`);
+                
+                // Check if date is within range AND matches the day of week
+                if (selDate >= start && selDate <= end && item.days.includes(selDay)) {
+                    match = true;
+                }
+            }
+
+            if (match) {
+                // If 'movements' array exists, iterate it. If not, use the item itself as a single movement.
+                const movements = item.movements || [item];
+
+                movements.forEach(m => {
+                    // Inherit properties from parent if not specified in movement
+                    const airline = m.airline || item.airline;
+                    const logo = m.logo || item.logo;
+                    const city = m.city || item.city;
+                    const iata = m.iata || item.iata;
+                    const type = m.type || item.type;
+                    const number = m.number || item.number;
+                    const time = m.time || item.time;
+
+                    const d = new Date(`${selectedDateStr}T${time}:00`);
+                    const ts = d.getTime() / 1000;
+                    
+                    allFlights.push({
+                        ts: ts,
+                        type: type,
+                        number: number,
+                        airline: airline,
+                        logo: logo,
+                        city: city,
+                        iata: iata,
+                        status: "Scheduled", 
+                        delayText: '',
+                        reg: '',
+                        model: '', 
+                        codeshare: '<span class="text-blue-500 font-bold">Charter</span>'
+                    });
+                });
+            }
+        });
+    }
+
+    function processFR24Data(arrivals, departures, airlineMap = {}) {
+        let allFlights = [];
+        const selectedDateStr = document.getElementById('date-picker').value;
+
+        const add = (list, type) => {
+            if(!list) return;
+            list.forEach(item => {
+                const f = item.flight;
+                const timeData = f.time;
+                
+                let tsScheduled = type === 'arrival' ? timeData.scheduled?.arrival : timeData.scheduled?.departure;
+                let tsReal = type === 'arrival' ? timeData.real?.arrival : timeData.real?.departure;
+
+                if (!tsScheduled) return;
+
+                const flightDateObj = new Date(tsScheduled * 1000);
+                const flightDateStr = flightDateObj.toLocaleDateString('en-CA', { timeZone: AIRPORT_TIMEZONE });
+
+                if (flightDateStr === selectedDateStr) {
+                    let delayText = '';
+                    if (tsReal) {
+                        const diffMins = Math.round((tsReal - tsScheduled) / 60);
+                        if (diffMins > 10) delayText = `${diffMins}m Late`;
+                        else if (diffMins < -10) delayText = `${Math.abs(diffMins)}m Early`;
+                    }
+
+                    let codeshareHTML = '';
+                    if (f.identification?.codeshare && f.identification.codeshare.length > 0) {
+                        codeshareHTML = f.identification.codeshare.map(code => {
+                            const prefix = code.substring(0, 2);
+                            const name = airlineMap[prefix]?.name || '';
+                            return name ? `${name} ${code}` : code;
+                        }).join(', ');
+                    }
+
+                    allFlights.push({
+                        ts: tsScheduled,
+                        type: type,
+                        number: f.identification?.number?.default || '---',
+                        airline: f.airline?.name || f.owner?.name || '',
+                        logo: f.owner?.logo || f.airline?.logo || null,
+                        city: type === 'arrival' ? (f.airport?.origin?.name) : (f.airport?.destination?.name),
+                        iata: type === 'arrival' ? (f.airport?.origin?.code?.iata) : (f.airport?.destination?.code?.iata),
+                        status: f.status?.text || '',
+                        delayText: delayText,
+                        reg: f.aircraft?.registration || '',
+                        model: f.aircraft?.model?.text || f.aircraft?.model?.code || '',
+                        codeshare: codeshareHTML
+                    });
+                }
+            });
+        };
+
+        add(arrivals, 'arrival');
+        add(departures, 'departure');
+        
+        injectManualFlights(allFlights, selectedDateStr);
+        
+        finishRender(allFlights);
+    }
+
+    function processDockYardData(arrivals, departures) {
+        let allFlights = [];
+        const selectedDateStr = document.getElementById('date-picker').value;
+        const now = new Date();
+
+        const getTs = (timeStr) => {
+            if (!timeStr) return 0;
+            return new Date(`${selectedDateStr}T${timeStr}:00`).getTime() / 1000;
+        };
+
+        const add = (list, type) => {
+            if(!Array.isArray(list)) return;
+            
+            list.forEach(item => {
+                const timeStr = type === 'arrival' ? item.arrival.time : item.departure.time;
+                const ts = getTs(timeStr);
+                const tsDate = new Date(ts * 1000);
+                
+                let status = "Scheduled";
+                if (tsDate < now) {
+                    status = type === 'arrival' ? "Landed" : "Departed";
+                }
+
+                let city, iata;
+                if (type === 'arrival') {
+                    city = item.departure.city;
+                    iata = item.departure.airport_iata;
+                } else {
+                    city = item.arrival.city;
+                    iata = item.arrival.airport_iata;
+                }
+
+                allFlights.push({
+                    ts: ts,
+                    type: type,
+                    number: item.flight.matched || item.flight.code,
+                    airline: item.flight.carrier.name,
+                    logo: item.flight.carrier.logo_square_image,
+                    city: city,
+                    iata: iata,
+                    status: status,
+                    delayText: '',
+                    reg: '', 
+                    model: '',
+                    codeshare: ''
+                });
+            });
+        };
+
+        add(arrivals, 'arrival');
+        add(departures, 'departure');
+        
+        injectManualFlights(allFlights, selectedDateStr);
+        
+        finishRender(allFlights);
+    }
+
+    function finishRender(allFlights) {
+        allFlights.sort((a, b) => a.ts - b.ts);
+        renderTable(allFlights);
+        hideLoader();
+    }
+
+    // --- UI HELPERS ---
+    function getWeatherIcon(code) {
+        if(code === undefined) return '⛅';
+        if(code === 0) return '☀️'; // Clear
+        if(code >= 1 && code <= 3) return '⛅'; // Cloudy
+        if(code >= 45 && code <= 48) return '🌫️'; // Fog
+        if(code >= 51 && code <= 55) return '🌧️'; // Drizzle
+        if(code >= 61 && code <= 67) return '🌧️'; // Rain
+        if(code >= 71 && code <= 77) return '🌨️'; // Snow
+        if(code >= 80 && code <= 82) return '🌧️'; // Showers
+        if(code >= 95) return '⛈️'; // Thunderstorm
+        return '⛅';
+    }
+
+    function updateHeader(details, weather) {
+        if(details) {
+            document.getElementById('banner-iata').innerText = details.code.iata || '---';
+            document.getElementById('banner-name').innerText = (details.name || 'Airport').replace('International Airport', '').replace('Airport', '');
+            if(details.airportImages?.large?.length > 0) {
+                document.getElementById('airport-banner').style.backgroundImage = `url('${details.airportImages.large[0].src}')`;
+            }
+        }
+        
+        if(!weather) {
+            document.getElementById('wx-temp').innerText = '--';
+            document.getElementById('wx-wind').innerText = '--';
+            document.getElementById('wx-hum').innerText = '--';
+            document.getElementById('wx-icon').innerText = '⛅';
+            return;
+        }
+
+        if (weather.isForecast) {
+            document.getElementById('wx-icon').innerText = getWeatherIcon(weather.code);
+            document.getElementById('wx-temp-container').innerHTML = `
+                <span class="text-lg">⬆️${weather.tempMax}° ⬇️${weather.tempMin}°</span>
+            `;
+            document.getElementById('wx-wind').innerText = weather.windMax + 'km/h';
+            document.getElementById('wx-hum-box').style.display = 'none'; 
+        } else {
+            document.getElementById('wx-icon').innerText = '⛅'; 
+            document.getElementById('wx-temp-container').innerHTML = `<span id="wx-temp">${weather.temp?.celsius}</span>°C`;
+            document.getElementById('wx-wind').innerText = (weather.wind?.speed?.kts || 0) + 'kt';
+            document.getElementById('wx-hum').innerText = weather.humidity || 0;
+            document.getElementById('wx-hum-box').style.display = 'inline';
+        }
+    }
+
+    function renderTable(flights) {
+        const tbody = document.getElementById('flight-table-body');
+        tbody.innerHTML = '';
+
+        if (!flights || flights.length === 0) {
+            showError("No Data", "0 flights found for this date.");
+            return;
+        }
+        document.getElementById('empty-state').classList.add('hidden');
+
+        const regCounts = {};
+        flights.forEach(f => {
+            if(f.reg) regCounts[f.reg] = (regCounts[f.reg] || 0) + 1;
+        });
+
+        flights.forEach((f, idx) => {
+            const tr = document.createElement('tr');
+            
+            let cls = `flight-row border-b border-gray-50 `;
+            cls += (idx % 2 === 0) ? 'bg-white ' : 'bg-slate-50 ';
+            cls += (f.type === 'arrival') ? 'row-arr ' : 'row-dep ';
+            
+            if (f.reg && regCounts[f.reg] > 1) cls += 'matched-plane ';
+            
+            tr.className = cls;
+
+            const timeStr = new Date(f.ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            
+            const s = f.status.toLowerCase();
+            let stColor = 'bg-gray-100 text-gray-500';
+            if(s.includes('landed') || s.includes('departed')) stColor = 'bg-green-100 text-green-700';
+            else if(s.includes('delayed')) stColor = 'bg-yellow-100 text-yellow-700';
+            else if(s.includes('cancelled')) stColor = 'bg-red-100 text-red-700';
+            else if(s.includes('scheduled')) stColor = 'bg-blue-50 text-blue-600';
+            else if(s.includes('estimated')) stColor = 'bg-blue-50 text-blue-600';
+
+            let delayColor = 'text-gray-400';
+            if(f.delayText.includes('Late')) delayColor = 'text-red-500 font-bold';
+            if(f.delayText.includes('Early')) delayColor = 'text-green-600 font-bold';
+
+            const iconArr = '<i class="fa-solid fa-plane-arrival text-green-500 mr-2 opacity-80"></i>';
+            const iconDep = '<i class="fa-solid fa-plane-departure text-blue-500 ml-2 opacity-80"></i>';
+            const cleanCity = (f.city || 'Unknown').replace(' International Airport', '').replace(' Airport', '');
+
+            tr.innerHTML = `
+                <td class="p-3 font-mono font-bold text-slate-700">${timeStr}</td>
+                <td class="p-3 font-bold text-slate-900 text-center">
+                    <div>${f.number}</div>
+                    ${f.codeshare ? `<div class="text-[9px] text-slate-400 font-normal mt-1 border-t border-slate-200 pt-1 leading-tight">${f.codeshare}</div>` : ''}
+                </td>
+                <td class="p-3 text-center">
+                    ${f.logo ? `<img src="${f.logo}" class="h-6 w-auto mx-auto object-contain" onerror="this.style.display='none'">` : ''}
+                </td>
+                <td class="p-3">
+                    <div class="flex items-center cell-content w-full h-full">
+                        ${f.type === 'arrival' ? iconArr : ''}
+                        <div>
+                            <span class="font-bold text-slate-800 block leading-tight">${cleanCity}</span>
+                            <span class="text-[10px] font-mono bg-slate-200 px-1 rounded text-slate-500">${f.iata || ''}</span>
+                        </div>
+                        ${f.type === 'departure' ? iconDep : ''}
+                    </div>
+                </td>
+                <td class="p-3 text-center">
+                    <div class="flex flex-col items-center">
+                        <span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wide border border-transparent ${stColor}">${f.status}</span>
+                        ${f.delayText ? `<span class="text-[10px] mt-1 ${delayColor}">${f.delayText}</span>` : ''}
+                    </div>
+                </td>
+                <td class="p-3 text-right font-mono text-xs text-slate-500">
+                    <div class="font-bold">${f.reg}</div>
+                    <div class="text-[10px] text-slate-400">${f.model}</div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function showLoader() {
+        document.getElementById('loader').classList.remove('hidden');
+        document.getElementById('flight-table-body').innerHTML = ''; 
+    }
+
+    function hideLoader() {
+        document.getElementById('loader').classList.add('hidden');
+    }
+
+    function showError(title, msg) {
+        hideLoader();
+        const emptyState = document.getElementById('empty-state');
+        emptyState.classList.remove('hidden');
+        document.getElementById('empty-msg').innerText = title;
+        document.getElementById('error-detail').innerText = msg;
+    }
+</script>
+
+</body>
+</html>
