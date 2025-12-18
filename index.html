@@ -139,7 +139,7 @@
         </div>
         
         <div class="bg-gray-50 p-2 text-center text-[10px] text-gray-400 border-t uppercase tracking-wider">
-            Data Source: <span id="data-source-label">FlightRadar24</span>
+            Data Source: <span id="data-source-label">Thomas Demisarlis</span>
         </div>
 
     </div>
@@ -400,12 +400,12 @@
             btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-lg bg-red-600 hover:bg-red-700";
             btn.innerHTML = '<i class="fa-solid fa-satellite-dish animate-pulse"></i> LIVE ON';
             indicator.classList.remove('hidden');
-            sourceLabel.innerText = "FlightRadar24 (Live)";
+            sourceLabel.innerText = "Thomas Demisarlis | Live Mode";
         } else {
             btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-md bg-gray-400 hover:bg-gray-500";
             btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> GO LIVE';
             indicator.classList.add('hidden');
-            sourceLabel.innerText = isDockYard ? "DockYard (Future Schedule)" : "FlightRadar24 (History/Sched)";
+            sourceLabel.innerText = isDockYard ? "DockYard (Future Schedule)" : "Thomas Demisarlis | (History/Sched)";
         }
     }
 
@@ -953,3 +953,4 @@
 
 </body>
 </html>
+
