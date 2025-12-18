@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EFL Flight Dashboard v2</title>
+    <title>EFL Flight Dashboard v25 (Logo Update)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -139,7 +139,7 @@
         </div>
         
         <div class="bg-gray-50 p-2 text-center text-[10px] text-gray-400 border-t uppercase tracking-wider">
-            KCG Traffic : <span id="data-source-label">KCG Transfer dpt</span>
+            Data Source: <span id="data-source-label">FlightRadar24</span>
         </div>
 
     </div>
@@ -469,12 +469,12 @@
             btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-lg bg-red-600 hover:bg-red-700";
             btn.innerHTML = '<i class="fa-solid fa-satellite-dish animate-pulse"></i> LIVE ON';
             indicator.classList.remove('hidden');
-            sourceLabel.innerText = "Thomas Demisarlis";
+            sourceLabel.innerText = "FlightRadar24 (Live)";
         } else {
             btn.className = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all shadow-md bg-gray-400 hover:bg-gray-500";
             btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> GO LIVE';
             indicator.classList.add('hidden');
-            sourceLabel.innerText = isDockYard ? "Thomas Demis" : "Thomas Demis";
+            sourceLabel.innerText = isDockYard ? "DockYard (Future Schedule)" : "FlightRadar24 (History/Sched)";
         }
     }
 
@@ -952,11 +952,13 @@
             const s = f.status.toLowerCase();
             let stColor = 'bg-gray-100 text-gray-500';
             if(s.includes('landed')) stColor = 'bg-green-100 text-green-700';
-	    else if(s.includes('departed')) stColor = 'bg-blue-100 text-blue-700';
+            else if(s.includes('departed')) stColor = 'bg-blue-100 text-blue-700';
             else if(s.includes('delayed')) stColor = 'bg-yellow-100 text-yellow-700';
             else if(s.includes('cancelled')) stColor = 'bg-red-100 text-red-700';
-            else if(s.includes('scheduled')) stColor = 'bg-blue-50 text-blue-600';
-            else if(s.includes('estimated')) stColor = 'bg-blue-50 text-blue-600';
+            else if(s.includes('scheduled') || s.includes('estimated')) {
+                // Apply green for arrival, blue for departure
+                stColor = (f.type === 'arrival') ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600';
+            }
 
             let delayColor = 'text-gray-400';
             if(f.delayText.includes('Late')) delayColor = 'text-red-500 font-bold';
